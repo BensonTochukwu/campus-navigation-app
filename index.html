@@ -45,6 +45,9 @@
 		let directionsService, directionsRenderer;
 		let activeNavigation = false;
 		let temporaryRouteDisplayed = false;
+		let watchId = null;
+
+		const markerMap = new Map(); // name => marker
 
 
 
@@ -53,7 +56,7 @@
 			"Admin Block": { lat: 6.669817, lng: 3.637239, type: "school" },
 			"College Building": { lat: 6.67018, lng: 3.63775, type: "school" },
 			"Architecture Building": { lat: 6.67075, lng: 3.63843, type: "school" },
-			"Jupeb Building": { lat: 6.67117, lng: 3.63892, type: "school" },
+			"College of Environmental Sciences and Management": { lat: 6.67117, lng: 3.63892, type: "school" },
 
 			"Elisha Hall": { lat: 6.67249, lng: 3.63523, type: "malehostel" },
 			"Integrity Hall": { lat: 6.67227, lng: 3.63420, type: "malehostel" },
@@ -90,7 +93,7 @@
 
 		};
 
-		let watchId = null;
+
 
 		function calculateWalkingTime(origin, destination, buildingName) {
 			if (activeNavigation) {
@@ -163,6 +166,8 @@
 
 			map = new google.maps.Map(document.getElementById("map"), {
 				zoom: isMobile ? 15.5 : 16.5,
+				minZoom: 15,
+				maxZoom: 18,
 				center,
 				mapTypeId: 'hybrid', // ✅ Shows satellite + roads
 				tilt: 45,
@@ -179,17 +184,40 @@
 				]
 			});
 
+			// ✅ Restrict panning to Caleb University area
+			const allowedBounds = new google.maps.LatLngBounds(
+				{ lat: 6.6655, lng: 3.6335 }, // Southwest corner of Caleb
+				{ lat: 6.6740, lng: 3.6425 }  // Northeast corner of Caleb
+			);
+
+			map.addListener("dragend", () => {
+				if (!allowedBounds.contains(map.getCenter())) {
+					map.panTo(allowedBounds.getCenter());
+				}
+			});
+
+
 			infoWindow = new google.maps.InfoWindow();
 			directionsService = new google.maps.DirectionsService();
 			directionsRenderer = new google.maps.DirectionsRenderer({
 				suppressMarkers: true,
 				polylineOptions: {
-					strokeColor: '#b71c1c',  // deep red
+					strokeColor: '#b71c1c',
 					strokeOpacity: 0.9,
-					strokeWeight: 5,         // thinner line; adjust if needed
+					strokeWeight: 5,
 				}
 			});
-			directionsRenderer.setMap(map);
+
+			map.addListener('zoom_changed', () => {
+				const zoom = map.getZoom();
+				for (const marker of allMarkers) {
+					const size = zoom < 16 ? 20 : 32;
+					marker.setIcon({
+						...marker.getIcon(),
+						scaledSize: new google.maps.Size(size, size)
+					});
+				}
+			});
 
 			const iconMap = {
 				malehostel: "assets/icons/malehostel.png",
@@ -215,11 +243,15 @@
 			};
 			const hoverIcon = { url: "http://maps.google.com/mapfiles/ms/icons/green-dot.png" };
 
+			const allMarkers = [];
+
 			for (const [name, building] of Object.entries(buildings)) {
 				const iconUrl = iconMap[building.type] || defaultIcon.url;
 				const position = { lat: building.lat, lng: building.lng };
 
 				const marker = createLabeledMarker(position, map, name, iconUrl);
+				markerMap.set(name, marker);
+				allMarkers.push(marker);
 
 				// Existing marker click logic (info window, navigation)
 				marker.addListener("click", () => {
@@ -238,11 +270,11 @@
 						if (status === 'OK') {
 							const leg = res.routes[0].legs[0];
 							const content = `
-					<strong><i class="fas fa-map-marker-alt"></i> ${name}</strong><br>
-					<div><i class="fas fa-walking"></i> Estimated time: ${leg.duration.text}</div>
-					<div>Distance: ${leg.distance.text}</div>
-					<button id="start-nav-btn" style="margin-top: 6px; background: #3498db; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Start Navigation</button>
-				`;
+							<strong><i class="fas fa-map-marker-alt"></i> ${name}</strong><br>
+							<div><i class="fas fa-walking"></i> Estimated time: ${leg.duration.text}</div>
+							<div>Distance: ${leg.distance.text}</div>
+							<button id="start-nav-btn" style="margin-top: 6px; background: #3498db; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Start Navigation</button>
+							`;
 
 							infoWindow.setContent(content);
 							infoWindow.setPosition(position);
@@ -257,6 +289,18 @@
 					});
 				});
 			}
+
+			map.addListener('zoom_changed', () => {
+				const zoom = map.getZoom();
+				for (const marker of allMarkers) {
+					const size = zoom < 16 ? 20 : 32; // Shrink if zoomed out
+					marker.setIcon({
+						...marker.getIcon(),
+						scaledSize: new google.maps.Size(size, size)
+					});
+				}
+			});
+
 
 			if (navigator.geolocation) {
 				navigator.geolocation.getCurrentPosition((position) => {
@@ -355,10 +399,19 @@
 
 			overlay.draw = function () {
 				const projection = this.getProjection();
+				const zoom = map.getZoom();
 				const pixelPosition = projection.fromLatLngToDivPixel(position);
+
 				if (pixelPosition) {
 					labelDiv.style.left = pixelPosition.x + 'px';
 					labelDiv.style.top = pixelPosition.y + 'px';
+
+					// Hide label if zoomed out too far
+					if (zoom < 16) {
+						labelDiv.style.display = 'none';
+					} else {
+						labelDiv.style.display = 'block';
+					}
 				}
 			};
 
@@ -403,8 +456,16 @@
 				item.textContent = name;
 
 				item.addEventListener('click', () => {
-					map.panTo(position);
-					map.setZoom(18);
+					const marker = markerMap.get(name);
+					if (marker) {
+						google.maps.event.trigger(marker, 'click');
+						map.panTo(marker.getPosition());
+						// map.setZoom(18);
+					}
+
+					resultsContainer.innerHTML = '';
+					searchInput.value = '';
+					searchInput.blur();
 
 					if (userLocation) {
 						directionsService.route({
@@ -529,7 +590,7 @@
 	<button id="my-location-btn" title="Go to my location">
 		<i class="fas fa-location-crosshairs"></i>
 	</button>
-	
+
 
 
 	<!-- Google Maps API -->
