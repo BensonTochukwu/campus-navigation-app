@@ -46,6 +46,15 @@
 		let activeNavigation = false;
 		let temporaryRouteDisplayed = false;
 		let watchId = null;
+		let locationEnabled = false;
+		let locationCircle = null;
+		let startLocation = null;
+		let startMarker = null;
+		let settingStartLocation = false;
+		let usingManualStart = false;
+
+
+
 
 		const markerMap = new Map(); // name => marker
 
@@ -102,12 +111,14 @@
 			}
 
 			directionsService.route({
-				origin,
+				origin, // ✅ Use the parameter passed in
 				destination,
 				travelMode: 'WALKING'
 			}, (response, status) => {
 				if (status === 'OK') {
-					directionsRenderer.setDirections(response);
+					directionsRenderer.setDirections({ routes: [] }); // Optional: clear first
+					directionsRenderer.setDirections(response); // ✅ Draw the route
+
 					temporaryRouteDisplayed = true;
 					const leg = response.routes[0].legs[0];
 
@@ -117,7 +128,6 @@
 					document.getElementById('nav-time').textContent = leg.duration.text;
 					document.getElementById('nav-distance').textContent = leg.distance.text;
 
-					// ✅ 🔊 Speak it once
 					const message = `Starting navigation to ${buildingName}. Estimated time is ${leg.duration.text}. Distance is ${leg.distance.text}.`;
 					const utterance = new SpeechSynthesisUtterance(message);
 					utterance.lang = 'en-US';
@@ -125,8 +135,8 @@
 
 					activeNavigation = true;
 
-					// Start live tracking
-					if (navigator.geolocation) {
+					// ✅ Only live tracking if not using manual start
+					if (!usingManualStart && navigator.geolocation) {
 						watchId = navigator.geolocation.watchPosition(
 							(pos) => {
 								const currentPos = {
@@ -169,7 +179,7 @@
 				minZoom: 15,
 				maxZoom: 18,
 				center,
-				mapTypeId: 'hybrid', // ✅ Shows satellite + roads
+				mapTypeId: 'hybrid',
 				tilt: 45,
 				mapTypeControl: false,
 				fullscreenControl: true,
@@ -184,10 +194,141 @@
 				]
 			});
 
+			const locationControlDiv = document.createElement('div');
+			locationControlDiv.style.margin = '10px';
+
+			const locationControlButton = document.createElement('button');
+			locationControlButton.innerHTML = '<i class="fas fa-location-crosshairs"></i> Enable Location';
+			locationControlButton.style.background = '#fff';
+			locationControlButton.style.border = '2px solid #707070';
+			locationControlButton.style.color = '#707070';
+			locationControlButton.style.padding = '8px 12px';
+			locationControlButton.style.borderRadius = '8px';
+			locationControlButton.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
+			locationControlButton.style.cursor = 'pointer';
+			locationControlButton.style.fontSize = '14px';
+			locationControlButton.style.fontFamily = 'Arial, sans-serif';
+
+			locationControlDiv.appendChild(locationControlButton);
+			map.controls[google.maps.ControlPosition.TOP_LEFT].push(locationControlDiv);
+
+			// Start Location Button Setup
+			const startControlDiv = document.createElement('div');
+			startControlDiv.style.margin = '10px';
+
+			const startControlButton = document.createElement('button');
+			startControlButton.innerHTML = '<i class="fas fa-map-marker-alt"></i> Set Start Location';
+			startControlButton.style.background = '#fff';
+			startControlButton.style.border = '2px solid #707070';
+			startControlButton.style.color = '#707070';
+			startControlButton.style.padding = '8px 12px';
+			startControlButton.style.borderRadius = '8px';
+			startControlButton.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
+			startControlButton.style.cursor = 'pointer';
+			startControlButton.style.fontSize = '14px';
+			startControlButton.style.fontFamily = 'Arial, sans-serif';
+
+			startControlDiv.appendChild(startControlButton);
+			map.controls[google.maps.ControlPosition.TOP_RIGHT].push(startControlDiv);
+
+			startControlButton.addEventListener('click', () => {
+				if (activeNavigation) {
+					alert("Please stop navigation before switching to Set Start Location.");
+					return;
+				}
+
+				if (locationEnabled) {
+					alert("Please disable Live Location before setting Start Location.");
+					return;
+				}
+
+				if (!startLocation) {
+					settingStartLocation = true;
+					usingManualStart = false;
+					startControlButton.innerHTML = '<i class="fas fa-times"></i> Remove Start Location';
+					startControlButton.style.color = '#b71c1c';
+					alert('Click on the map to set your start location.');
+				} else {
+					startLocation = null;
+					usingManualStart = false;
+					settingStartLocation = false;
+
+					if (startMarker) {
+						startMarker.setMap(null);
+						startMarker = null;
+					}
+
+					startControlButton.innerHTML = '<i class="fas fa-map-marker-alt"></i> Set Start Location';
+					startControlButton.style.color = '#707070';
+					alert("Start location removed.");
+				}
+			});
+
+
+
+			locationControlButton.addEventListener('click', () => {
+				if (activeNavigation) {
+					alert("Please stop navigation before switching to Live Location.");
+					return;
+				}
+
+				if (startLocation) {
+					alert("Please disable Start Location before enabling Live Location.");
+					return;
+				}
+
+				if (!locationEnabled) {
+					if (navigator.geolocation) {
+						navigator.geolocation.getCurrentPosition((position) => {
+							userLocation = {
+								lat: position.coords.latitude,
+								lng: position.coords.longitude
+							};
+
+							locationCircle = new google.maps.Circle({
+								strokeColor: '#ffffff',
+								strokeOpacity: 1,
+								strokeWeight: 1,
+								fillColor: '#b71c1c',
+								fillOpacity: 1,
+								map,
+								center: userLocation,
+								radius: 5
+							});
+
+							map.panTo(userLocation);
+							map.setZoom(17);
+
+							locationEnabled = true;
+							usingManualStart = false; // ✅ force live mode
+							locationControlButton.innerHTML = '<i class="fas fa-ban"></i> Disable Location';
+						}, () => {
+							alert("Location access denied.");
+						});
+					} else {
+						alert("Geolocation not supported.");
+					}
+				} else {
+					// Disable live location
+					userLocation = null;
+					locationEnabled = false;
+
+					if (locationCircle) {
+						locationCircle.setMap(null);
+						locationCircle = null;
+					}
+
+					locationControlButton.innerHTML = '<i class="fas fa-location-crosshairs"></i> Enable Location';
+					alert("Live location disabled.");
+				}
+			});
+
 			// ✅ Restrict panning to Caleb University area
 			const allowedBounds = new google.maps.LatLngBounds(
 				{ lat: 6.6655, lng: 3.6335 }, // Southwest corner of Caleb
 				{ lat: 6.6740, lng: 3.6425 }  // Northeast corner of Caleb
+
+
 			);
 
 			map.addListener("dragend", () => {
@@ -207,6 +348,7 @@
 					strokeWeight: 5,
 				}
 			});
+			directionsRenderer.setMap(map);
 
 			map.addListener('zoom_changed', () => {
 				const zoom = map.getZoom();
@@ -255,25 +397,27 @@
 
 				// Existing marker click logic (info window, navigation)
 				marker.addListener("click", () => {
-					if (!userLocation) {
-						infoWindow.setContent(`<strong>${name}</strong><br><em>Enable location to see walking time</em>`);
+					const origin = userLocation || startLocation;
+
+					if (!origin) {
+						infoWindow.setContent(`<strong>${name}</strong><br><em>Please enable or set a start location to see walking time</em>`);
 						infoWindow.setPosition(position);
 						infoWindow.open(map, marker);
 						return;
 					}
 
 					directionsService.route({
-						origin: userLocation,
+						origin: origin,
 						destination: position,
 						travelMode: 'WALKING'
 					}, (res, status) => {
 						if (status === 'OK') {
 							const leg = res.routes[0].legs[0];
 							const content = `
-							<strong><i class="fas fa-map-marker-alt"></i> ${name}</strong><br>
-							<div><i class="fas fa-walking"></i> Estimated time: ${leg.duration.text}</div>
-							<div>Distance: ${leg.distance.text}</div>
-							<button id="start-nav-btn" style="margin-top: 6px; background: #3498db; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Start Navigation</button>
+								<strong><i class="fas fa-map-marker-alt"></i> ${name}</strong><br>
+								<div><i class="fas fa-walking"></i> Estimated time: ${leg.duration.text}</div>
+								<div>Distance: ${leg.distance.text}</div>
+								<button id="start-nav-btn" style="margin-top: 6px; background: #3498db; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Start Navigation</button>
 							`;
 
 							infoWindow.setContent(content);
@@ -282,12 +426,13 @@
 
 							google.maps.event.addListenerOnce(infoWindow, 'domready', () => {
 								document.getElementById('start-nav-btn').addEventListener('click', () => {
-									calculateWalkingTime(userLocation, position, name);
+									calculateWalkingTime(origin, position, name); // 👈 important fix
 								});
 							});
 						}
 					});
 				});
+
 			}
 
 			map.addListener('zoom_changed', () => {
@@ -301,28 +446,6 @@
 				}
 			});
 
-
-			if (navigator.geolocation) {
-				navigator.geolocation.getCurrentPosition((position) => {
-					userLocation = {
-						lat: position.coords.latitude,
-						lng: position.coords.longitude
-					};
-
-					new google.maps.Circle({
-						strokeColor: '#ffffff',
-						strokeOpacity: 1,
-						strokeWeight: 1,
-						fillColor: '#b71c1c',
-						fillOpacity: 1,
-						map,
-						center: userLocation,
-						radius: 5 // in meters
-					});
-
-				});
-
-			}
 
 			document.getElementById('stop-navigation').addEventListener('click', () => {
 				if (watchId) {
@@ -339,17 +462,40 @@
 				infoWindow.close();
 			});
 
-			document.getElementById("my-location-btn").addEventListener("click", () => {
-				if (userLocation && map) {
-					map.panTo(userLocation);
-					map.setZoom(17);
-				} else {
-					alert("Location not available yet. Please allow location access.");
-				}
-			});
 
-			map.addListener('click', () => {
-				if (!activeNavigation) {
+			map.addListener('click', (e) => {
+				const clickedLatLng = e.latLng;
+
+				if (settingStartLocation) {
+					if (startMarker) startMarker.setMap(null);
+
+					startMarker = new google.maps.Marker({
+						position: clickedLatLng,
+						map,
+						title: 'Start Location',
+						icon: {
+							path: google.maps.SymbolPath.CIRCLE,
+							scale: 6,
+							fillColor: '#b71c1c',
+							fillOpacity: 1,
+							strokeWeight: 2,
+							strokeColor: '#fff'
+						}
+					});
+
+					startLocation = {
+						lat: clickedLatLng.lat(),
+						lng: clickedLatLng.lng()
+					};
+
+					userLocation = startLocation; // 👈 VERY IMPORTANT so info windows work
+					usingManualStart = true;
+
+					map.panTo(startLocation);
+					settingStartLocation = false;
+					alert('Start location set.');
+				}
+				else if (!activeNavigation) {
 					infoWindow.close();
 					if (temporaryRouteDisplayed) {
 						directionsRenderer.setDirections({ routes: [] });
@@ -357,6 +503,8 @@
 					}
 				}
 			});
+
+
 
 			activeNavigation = false;
 			temporaryRouteDisplayed = false;
@@ -460,7 +608,7 @@
 					if (marker) {
 						google.maps.event.trigger(marker, 'click');
 						map.panTo(marker.getPosition());
-						// map.setZoom(18);
+						map.setZoom(18);
 					}
 
 					resultsContainer.innerHTML = '';
@@ -469,7 +617,7 @@
 
 					if (userLocation) {
 						directionsService.route({
-							origin: userLocation,
+							origin: userLocation || startLocation,
 							destination: position,
 							travelMode: 'WALKING'
 						}, (res, status) => {
@@ -556,7 +704,7 @@
 
 	</script>
 
-	<!-- Navigation Tracker UI -->
+	Navigation Tracker UI
 	<div id="navigation-box" style="
 		position: fixed;
 		bottom: 20px;
@@ -585,13 +733,6 @@
 		cursor: pointer;
 	">Stop</button>
 	</div>
-
-	<!-- My Location Button -->
-	<button id="my-location-btn" title="Go to my location">
-		<i class="fas fa-location-crosshairs"></i>
-	</button>
-
-
 
 	<!-- Google Maps API -->
 	<script async
