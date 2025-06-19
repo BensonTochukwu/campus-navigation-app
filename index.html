@@ -56,12 +56,12 @@
 
 
 
-		const markerMap = new Map(); // name => marker
+		const markerMap = new Map();
 
 
 
 		const buildings = {
-			"Mass Communication Building": { lat: 6.66860, lng: 3.63660, type: "school" },
+			"Mass Communication Building": { lat: 6.66830, lng: 3.63660, type: "school" },
 			"Admin Block": { lat: 6.669817, lng: 3.637239, type: "school" },
 			"College Building": { lat: 6.67018, lng: 3.63775, type: "school" },
 			"Architecture Building": { lat: 6.67075, lng: 3.63843, type: "school" },
@@ -70,7 +70,7 @@
 			"Elisha Hall": { lat: 6.67249, lng: 3.63523, type: "malehostel" },
 			"Integrity Hall": { lat: 6.67227, lng: 3.63420, type: "malehostel" },
 			"Levi Hall": { lat: 6.67296, lng: 3.63460, type: "malehostel" },
-			"Joshua Hall": { lat: 6.67169, lng: 3.63573, type: "malehostel" },
+			"Joshua Hall": { lat: 6.67163, lng: 3.63584, type: "malehostel" },
 			"Joseph Hall": { lat: 6.67205, lng: 3.63567, type: "malehostel" },
 
 			"Mary Hall": { lat: 6.66716, lng: 3.63792, type: "femalehostel" },
@@ -78,11 +78,11 @@
 			"Esme Hall": { lat: 6.66690, lng: 3.63646, type: "femalehostel" },
 			"Rebecca Hall": { lat: 6.66678, lng: 3.63820, type: "femalehostel" },
 			"Mercy Hall": { lat: 6.66645, lng: 3.63690, type: "femalehostel" },
-			"Dorcas Hall": { lat: 6.66757, lng: 3.63721, type: "femalehostel" },
-			"Deborah Hall": { lat: 6.66791, lng: 3.63731, type: "femalehostel" },
+			"Dorcas Hall": { lat: 6.66737, lng: 3.63721, type: "femalehostel" },
+			"Deborah Hall": { lat: 6.66780, lng: 3.63731, type: "femalehostel" },
 
 			"Cafteria 1": { lat: 6.67026, lng: 3.63588, type: "food" },
-			"Cafteria 2": { lat: 6.67147, lng: 3.63638, type: "food" },
+			"Cafteria 2": { lat: 6.67130, lng: 3.63610, type: "food" },
 
 			"Bakery": { lat: 6.67074, lng: 3.63502, type: "bakery" },
 
@@ -111,13 +111,13 @@
 			}
 
 			directionsService.route({
-				origin, // ✅ Use the parameter passed in
+				origin,
 				destination,
 				travelMode: 'WALKING'
 			}, (response, status) => {
 				if (status === 'OK') {
-					directionsRenderer.setDirections({ routes: [] }); // Optional: clear first
-					directionsRenderer.setDirections(response); // ✅ Draw the route
+					directionsRenderer.setDirections({ routes: [] });
+					directionsRenderer.setDirections(response);
 
 					temporaryRouteDisplayed = true;
 					const leg = response.routes[0].legs[0];
@@ -135,7 +135,6 @@
 
 					activeNavigation = true;
 
-					// ✅ Only live tracking if not using manual start
 					if (!usingManualStart && navigator.geolocation) {
 						watchId = navigator.geolocation.watchPosition(
 							(pos) => {
@@ -300,7 +299,7 @@
 							map.setZoom(17);
 
 							locationEnabled = true;
-							usingManualStart = false; // ✅ force live mode
+							usingManualStart = false;
 							locationControlButton.innerHTML = '<i class="fas fa-ban"></i> Disable Location';
 						}, () => {
 							alert("Location access denied.");
@@ -323,7 +322,7 @@
 				}
 			});
 
-			// ✅ Restrict panning to Caleb University area
+			// Restrict panning to Caleb University area
 			const allowedBounds = new google.maps.LatLngBounds(
 				{ lat: 6.6655, lng: 3.6335 }, // Southwest corner of Caleb
 				{ lat: 6.6740, lng: 3.6425 }  // Northeast corner of Caleb
@@ -352,8 +351,12 @@
 
 			map.addListener('zoom_changed', () => {
 				const zoom = map.getZoom();
+				const isMobile = window.innerWidth <= 768;
 				for (const marker of allMarkers) {
-					const size = zoom < 16 ? 20 : 32;
+					const size = isMobile
+						? (zoom < 16 ? 16 : 24)  // smaller icons on mobile
+						: (zoom < 16 ? 20 : 32); // default for desktop
+
 					marker.setIcon({
 						...marker.getIcon(),
 						scaledSize: new google.maps.Size(size, size)
@@ -379,7 +382,7 @@
 
 
 			const defaultIcon = {
-				url: "assets/icons/gate.png", // fallback
+				url: "assets/icons/gate.png",
 				scaledSize: new google.maps.Size(32, 32),
 				anchor: new google.maps.Point(16, 32)
 			};
@@ -426,7 +429,7 @@
 
 							google.maps.event.addListenerOnce(infoWindow, 'domready', () => {
 								document.getElementById('start-nav-btn').addEventListener('click', () => {
-									calculateWalkingTime(origin, position, name); // 👈 important fix
+									calculateWalkingTime(origin, position, name);
 								});
 							});
 						}
@@ -434,18 +437,6 @@
 				});
 
 			}
-
-			map.addListener('zoom_changed', () => {
-				const zoom = map.getZoom();
-				for (const marker of allMarkers) {
-					const size = zoom < 16 ? 20 : 32; // Shrink if zoomed out
-					marker.setIcon({
-						...marker.getIcon(),
-						scaledSize: new google.maps.Size(size, size)
-					});
-				}
-			});
-
 
 			document.getElementById('stop-navigation').addEventListener('click', () => {
 				if (watchId) {
@@ -488,7 +479,7 @@
 						lng: clickedLatLng.lng()
 					};
 
-					userLocation = startLocation; // 👈 VERY IMPORTANT so info windows work
+					userLocation = startLocation;
 					usingManualStart = true;
 
 					map.panTo(startLocation);
@@ -516,6 +507,9 @@
 				directionsRenderer.setDirections({ routes: [] });
 				temporaryRouteDisplayed = false;
 			}
+			window.addEventListener('resize', () => {
+				google.maps.event.trigger(map, 'zoom_changed'); // Re-trigger icon sizing
+			});
 
 		}
 
@@ -537,7 +531,8 @@
 			labelDiv.style.color = 'black';
 			labelDiv.style.fontFamily = 'Arial, sans-serif';
 			labelDiv.style.whiteSpace = 'nowrap';
-			labelDiv.style.transform = 'translate(-20px, -03px)'; // Moved closer to the icon
+			labelDiv.style.transform = 'translate(-20px, -03px)';
+			labelDiv.style.pointerEvents = 'none';
 
 			const overlay = new google.maps.OverlayView();
 			overlay.onAdd = function () {
@@ -547,18 +542,27 @@
 
 			overlay.draw = function () {
 				const projection = this.getProjection();
-				const zoom = map.getZoom();
 				const pixelPosition = projection.fromLatLngToDivPixel(position);
+				const zoom = map.getZoom();
 
 				if (pixelPosition) {
 					labelDiv.style.left = pixelPosition.x + 'px';
 					labelDiv.style.top = pixelPosition.y + 'px';
 
-					// Hide label if zoomed out too far
+					// Only show labels if zoom is sufficient
 					if (zoom < 16) {
 						labelDiv.style.display = 'none';
 					} else {
 						labelDiv.style.display = 'block';
+
+						// Apply mobile-specific styling
+						if (window.innerWidth <= 768) {
+							labelDiv.style.fontSize = '10px';
+							labelDiv.style.transform = 'translate(-18px, -12px)';
+						} else {
+							labelDiv.style.fontSize = '13px';
+							labelDiv.style.transform = 'translate(-22px, -3px)';
+						}
 					}
 				}
 			};
@@ -600,7 +604,7 @@
 			matches.slice(0, 50).forEach(([name, position]) => {
 				const item = document.createElement('div');
 				item.classList.add('result-item');
-				item.setAttribute('tabindex', '0'); // 🔑 make focusable
+				item.setAttribute('tabindex', '0');
 				item.textContent = name;
 
 				item.addEventListener('click', () => {
