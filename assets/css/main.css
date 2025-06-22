@@ -895,7 +895,7 @@ body.is-preload #intro:not(.hidden)+#header+#nav {
 
 @media screen and (max-width: 768px) {
 	#map {
-		height: 500px;
+		height: 700px;
 	}
 }
 
